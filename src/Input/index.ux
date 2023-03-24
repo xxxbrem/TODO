@@ -1,0 +1,566 @@
+<template>
+  <!-- 输入界面 -->
+  <div class="input-page">
+    <div class="header">
+      <text>NEW TODO</text>
+      <image class="add-btn" src="../assets/images/tick1.png" onclick="addEvent"></image>
+    </div>
+    <!-- 事件内容 -->
+    <div class="new-event">
+      <list class='setting'>
+        <!-- 事件标题 -->
+        <list-item class="setting-item">
+          <div class="title">
+            <image class="item-image" src="../assets/images/title.png"></image>
+            <div class='event-input'>
+              <!-- 点击图标清空、语音输入 -->
+              <input type="text" placeholder='Title' value="{{eventName}}" onchange="updateValue"></input>
+              <image class='btn-img' onclick='clearEventName' src="../assets/images/cross.png"></image>
+              <div class='asr-image1' onclick='startAsrTitle'></div>
+            </div>
+          </div>
+        </list-item>
+        <!-- 事件地点 -->
+        <list-item class="setting-item">
+          <div class="location">
+            <image class="item-image" src="../assets/images/location-gray.png"></image>
+            <div class='event-location'>
+              <input type="text" placeholder='Location' value="{{locationName}}" onchange="updateLocation"></input>
+              <image class='btn-img' onclick='clearLocationName' src="../assets/images/cross.png"></image>
+              <div class='asr-image1' onclick='startAsrLocation'></div>
+            </div>
+          </div>
+        </list-item>
+        <!-- 重要事件 -->
+        <list-item class="setting-item">
+          <image class="item-image" src="../assets/images/important.png"></image>
+          <div class='important-area'>
+            <text class='txt'>Important</text>
+            <div class="btn-check {{important ? 'btn-checked' : ''}}" onclick="turn_important"></div>
+          </div>
+        </list-item>
+        <!-- 无截止日期 -->
+        <list-item class="setting-item">
+          <image class="item-image" src="../assets/images/noddl-gray.png"></image>
+          <div class='noddl-area'>
+            <text class='txt'>No ddl</text>
+            <div class="btn-check {{no_ddl ? 'btn-checked' : ''}}" onclick="turn_no_ddl"></div>
+          </div>
+        </list-item>
+        <!-- 全天 -->
+        <list-item class="setting-item">
+          <image class="item-image" src="../assets/images/allday-gray.png"></image>
+          <div class='allday-area'>
+            <text class='txt'>All day</text>
+            <div class="btn-check {{all_day ? 'btn-checked' : ''}}" onclick="turn_all_day"></div>
+          </div>
+        </list-item>
+        <!-- 开始时间 -->
+        <list-item class="setting-item">
+          <image class="item-image" src="../assets/images/white.png"></image>
+          <text class="txt">Start</text>
+          <div class='time-area'>
+            <div class='time-input'>
+              <!-- picker选择日期时间 -->
+              <text>Date: </text>
+              <picker class='date-picker' type="date" value="{{start_date}}" onchange="getStartDate"></picker>
+              <text>Time: </text>
+              <picker class='time-picker' type="time" value={{addZero(start_time)}} onchange="getStartTime"></picker>
+            </div>
+          </div>
+        </list-item>
+        <!-- 结束时间 -->
+        <list-item class="setting-item">
+          <image class="item-image" src="../assets/images/white.png"></image>
+          <text class="txt">End</text>
+          <div class='time-area'>
+            <div class='time-input'>
+              <text>Date: </text>
+              <picker class='date-picker' type="date" value="{{end_date}}" onchange="getEndDate" selected="{{end_date}}"></picker>
+              <text>Time: </text>
+              <picker class='time-picker' type="time" value="{{addZero(end_time)}}" onchange="getEndTime" selected="{{end_time}}"></picker>
+            </div>
+          </div>
+        </list-item>
+      </list>
+    </div>
+    <!-- 对事件的描述 -->
+    <list class='description'>
+      <list-item class="description-item">
+        <div class="des-img">
+          <image class="des-image" src="../assets/images/description.png"></image>
+          <image class='btn-image' onclick='clearEventContent' src="../assets/images/cross.png"></image>
+          <div class='asr-image' onclick='startAsrDes'></div>
+        </div>
+        <div class='des-input'>
+          <textarea placeholder='Description' value="{{eventContent}}" onchange="updateContent"></textarea>
+        </div>
+      </list-item>
+    </list>
+  </div>
+</template>
+
+<script>
+// 语音识别接口
+import asr from '@service.asr'
+import storage from '@system.storage'
+// 震动接口
+import vibrator from '@system.vibrator'
+import router from '@system.router'
+
+export default {
+  private: {
+    eventName: '',
+    eventContent: '',
+    locationName: '',
+    nameBackUp: '',
+    contentBackup: '',
+    locationBackup: '',
+    start_date: '',
+    start_time: '',
+    end_date: '',
+    end_time: '',
+    no_ddl: false,
+    important: false,
+    all_day: false,
+    enabled: false,
+    scale: ''
+  },
+  //修改任务时使用，新建时不使用
+  protected: {
+    pushName: '',
+    pushContent: '',
+    pushLocation: '',
+    pushStart: '',
+    pushEnd: '',
+    pushType: '',
+    pushIdx: '',
+    pushAllDay: '',
+    pushImportant: '',
+    pushNoDDL: '',
+  },
+
+  onInit() {
+    this.$page.setTitleBar({ text: 'ADD TODO' })
+    // 初始化asr
+    this.initAsrTitle()
+    // 初始化时间
+    this.initTime()
+    this.eventName = this.pushName
+    this.eventContent = this.pushContent
+    this.locationName = this.pushLocation
+    this.all_day = this.pushAllDay
+    this.important = this.pushImportant
+    this.no_ddl = this.pushNoDDL
+    if (this.pushStart != 'ok') {
+      let list2 = this.pushStart.split(' ')
+      this.start_date = list2[0]
+      this.start_time = list2[1]
+    }
+    if (this.pushEnd != 'No ddl') {
+      let list1 = this.pushEnd.split(' ')
+      this.end_date = list1[0]
+      this.end_time = list1[1]
+    }
+  },
+  onDestroy() {
+  },
+
+  // 初始化picker显示内容
+  initTime() {
+    const date = new Date()
+    const Y = date.getFullYear()
+    const M = date.getMonth() + 1
+    const D = date.getDate()
+    const H = date.getHours()
+    const m = date.getMinutes()
+    this.start_date = Y + '-' + M + '-' + D
+    this.start_time = H + ':' + m
+    // 初始化end_time晚1h
+    date.setTime(date.getTime() + 60 * 60 * 1000)
+    const TY = date.getFullYear()
+    const TM = date.getMonth() + 1
+    const TD = date.getDate()
+    const TH = date.getHours()
+    const Tm = date.getMinutes()
+    this.end_date = TY + '-' + TM + '-' + TD
+    this.end_time = TH + ':' + Tm
+  },
+
+  // 初始化标题asr
+  initAsrTitle() {
+    let that = this
+    asr.oncompleteresult = ({ result }) => {
+      this.eventName = this.nameBackUp + `${result}`
+    }
+  },
+  // 初始化描述asr
+  initAsrDes() {
+    let that = this
+    asr.oncompleteresult = ({ result }) => {
+      this.eventContent = this.contentBackup + `${result}`
+    }
+  },
+  // 初始化位置asr
+  initAsrLocation() {
+    let that = this
+    asr.oncompleteresult = ({ result }) => {
+      this.locationName = this.locationBackup + `${result}`
+    }
+  },
+  // 开启标题asr
+  startAsrTitle() {
+    let that = this
+    this.nameBackUp = this.eventName
+    asr.start({
+      success: function () {
+        vibrator.vibrate({ mode: 'short' })
+      },
+      fail: function (data, code) {
+        that.eventName = `start fail, code=${code}, data=${data}`
+      }
+    })
+  },
+  // 开启描述asr
+  startAsrDes() {
+    this.initAsrDes()
+    let that = this
+    this.contentBackup = this.eventContent
+    asr.start({
+      success: function () {
+        vibrator.vibrate({ mode: 'short' })
+      },
+      fail: function (data, code) {
+        that.eventContent = `start fail, code=${code}, data=${data}`
+      }
+    })
+  },
+  // 开启位置asr
+  startAsrLocation() {
+    this.initAsrLocation()
+    let that = this
+    this.locationBackup = this.locationName
+    asr.start({
+      success: function () {
+        // 振动
+        vibrator.vibrate({ mode: 'short' })
+      },
+      fail: function (data, code) {
+        that.locationName = `start fail, code=${code}, data=${data}`
+      }
+    })
+  },
+
+  // 时间加0
+  addZero(time) {
+    let time_list = time.split(':')
+    return (time_list[0] + ":" + (time_list[1]<10?"0"+time_list[1]:time_list[1]))
+  },
+
+  // 更新输入内容
+  updateValue(evt) {
+    this.eventName = evt.value
+  },
+  updateLocation(evt){
+    this.locationName = evt.value
+  },
+  updateContent(evt){
+    this.eventContent = evt.text
+  },
+
+  // 清除输入内容
+  clearEventName() {
+    this.eventName = ''
+  },
+  clearEventContent() {
+    this.eventContent = ''
+  },
+
+  clearLocationName() {
+    this.locationName = ''
+  },
+
+  // 添加事件
+  addEvent() {
+    // 必须填写标题
+    if (this.eventName === '') {
+      this.$app.$def.makeToast('error: title is null')
+    }
+    else {
+      let start = this.start_date + ' ' + this.start_time
+      // 根据是否NO ddl以及是否All day决定end
+      let end = this.no_ddl ? 'No ddl' : (this.end_date + ' ' + this.end_time)
+      if (this.all_day && !this.no_ddl) {
+        end = this.start_date + ' 23:59'
+      }
+      let that = this
+      // 读取存储
+      storage.get({
+        key: 'msg',
+        success: function (data) {
+          if (data != '') {
+            // string转数组
+            let list = JSON.parse(data)
+            // 修改事项时触发
+            if (that.pushType == 0) list.toDoList.splice(that.pushIdx, 1)
+            else if (that.pushType == 1) list.doingList.splice(that.pushIdx, 1)
+            else if (that.pushType == 2) list.doneList.splice(that.pushIdx, 1)
+            // 判断todo/doing
+            let arr = start.replace(/[:\-\\ ]/g, ',').split(',')
+            let startDate = new Date(arr[0], arr[1] - 1, arr[2], arr[3], arr[4], 0, 0)
+            let nowDate = new Date()
+            // 判断是todo还是doing
+            if (nowDate.getTime() > startDate.getTime()) 
+              list.doingList.push({ name: that.eventName, 
+                                    start: start, 
+                                    end: end, 
+                                    content: that.eventContent, 
+                                    location: that.locationName, 
+                                    is_all_day: that.all_day, 
+                                    is_important: that.important,
+                                    is_no_ddl: that.no_ddl })
+            else 
+              list.toDoList.push({name: that.eventName, 
+                                  start: start, 
+                                  end: end, 
+                                  content: that.eventContent, 
+                                  location: that.locationName, 
+                                  is_all_day: that.all_day, 
+                                  is_important: that.important,
+                                  is_no_ddl: that.no_ddl })
+            // 保存list并返回
+            storage.set({
+              key: 'msg',
+              value: list,
+              success: function () {
+                that.eventName = ''
+                router.back()
+              },
+              fail: function (data, code) {
+                that.$app.$def.makeToast(`handling fail, code = ${code}`)
+              }
+            })
+          }
+        },
+        fail: function (data, code) {
+          that.$app.$def.makeToast(`handling fail, code = ${code}`)
+        }
+      })
+    }
+  },
+
+  // 获取事件日期
+  getStartDate(e) {
+    this.start_date = e.year + '-' + (e.month + 1) + '-' + e.day
+    // 输入开始日期后，结束日期随之变动
+    this.end_date = e.year + '-' + (e.month + 1) + '-' + e.day
+  },
+  getStartTime(e) {
+    this.start_time = e.hour + ':' + e.minute
+    // 结束时间默认1h后
+    this.end_time = (e.hour + 1) + ':' + e.minute
+  },
+  getEndDate(e) {
+    this.end_date = e.year + '-' + (e.month + 1) + '-' + e.day
+  },
+  getEndTime(e) {
+    this.end_time = e.hour + ':' + e.minute
+  },
+  
+  // 切换是否no ddl
+  turn_no_ddl() {
+    this.no_ddl = !this.no_ddl
+  },
+  turn_all_day() {
+    this.all_day = !this.all_day
+  },
+  turn_important() {
+    this.important = !this.important
+  },
+}
+</script>
+
+<style lang="less">
+@import "../Common/css/font.css";
+
+.header {
+  height: 170px;
+  width: 750px;
+  > text {
+    padding: 50px;
+    font-family: myfont, serif;
+    font-size: 50px;
+    font-weight: 300;
+    color: #000000;
+  }
+  .add-btn {
+    margin: 35px, 0px, 35px, 220px;
+    width: 100px;
+    height: 100px;
+  }
+}
+.input-page {
+  flex-direction: column;
+  background-color: rgb(239, 244, 255);
+  .new-event {
+    height: 840px;
+    width: 710px;
+    margin-left: 20px;
+    margin-right: 20px;
+    background-color: #ffffff;
+    border-radius: 40px;
+    flex-direction: column;
+    .setting {
+      .setting-item {
+        height: 120px;
+        border-top: 3px solid rgb(239, 244, 255);
+        > text {
+          width: 120px;
+        }
+        .item-image {
+          margin: 15px;
+        }
+        .event-input {
+          height: 120px;
+          flex-direction: row;
+          > input {
+            flex-grow: 1;
+            margin: 10px;
+            width: 400px;
+          }
+        }
+        .event-location {
+          height: 120px;
+          flex-direction: row;
+          > input {
+            flex-grow: 1;
+            margin: 10px;
+            width: 400px;
+            font-size: 30px;
+          }
+        }
+        .btn-img {
+          width: 50px;
+          height: 50px;
+          margin: 35px 0px 35px 0px;
+        }
+        .asr-image1 {
+          width: 50px;
+          height: 50px;
+          margin: 35px;
+          background-image: url("../assets/images/mic.png");
+        }
+        .txt {
+          width: 140px;
+          font-size: 30px;
+          margin-left: 10px;
+          color: #000000;
+        }
+      }
+      .time-area {
+        flex-direction: row;
+        height: 117px;
+        margin-left: 20px;
+        width: 400px;
+        .time-input {
+          .date-picker {
+            width: 170px;
+            flex: 0;
+            font-family: myfont, serif;
+          }
+          .time-picker {
+            width: 90px;
+            flex: 0;
+            font-family: myfont, serif;
+          }
+        }
+        > text {
+          width: 120px;
+          font-size: 30px;
+          text-align: center;
+        }
+      }
+    }
+  }
+  .description {
+    height: 350px;
+    width: 710px;
+    margin: 20px;
+    background-color: #ffffff;
+    border-radius: 40px;
+    .description-item {
+      height: 350px;
+    }
+    .des-img {
+      flex-direction: column;
+      width: 116px;
+      .des-image {
+        margin: 15px, 15px, 15px, 15px;
+        width: 86px;
+        height: 86px;
+      }
+      .btn-image {
+        width: 50px;
+        height: 50px;
+        margin: 30px, 23px, 30px, 30px;
+      }
+      .asr-image {
+        width: 50px;
+        height: 50px;
+        margin: 30px, 23px, 30px, 30px;
+        background-image: url("../assets/images/mic.png");
+      }
+    }
+    .des-input {
+      margin: 20px, 20px, 20px, 13px;
+      height: 400px;
+      width: 550px;
+      > textarea {
+        margin-top: 15px;
+        width: 550px;
+        font-size: 30px;
+      }
+    }
+  } 
+}
+
+.normal-text {
+  padding-top: 50px;
+  padding-bottom: 50px;
+  width: 250px;
+  flex-wrap: nowrap;
+  font-size: 35px;
+  font-weight: bold;
+  font-family: myfont-bold, serif;
+  color: #000000;
+}
+
+.btn-check {
+  width: 50px;
+  height: 50px;
+  margin: 33.5px 0px 33.5px 350px;
+  border-radius: 25px;
+  border-width: 2px;
+  border-color: #949494;
+}
+
+.btn-checked {
+  border-width: 0px;
+  width: 53px;
+  height: 53px;
+  margin: 32px 0px 32px 350px;
+  background-image: url("../assets/images/tick-blue.png");
+}
+
+.asr-btn-enabled {
+  flex: 0;
+  height: 120px;
+  width: 120px;
+  border-radius: 60px;
+  border-width: 5px;
+  border-color: rgb(238, 240, 245);
+  align-self: center;
+  margin-top: 70px;
+  background-color: #ffffff;
+}
+</style>

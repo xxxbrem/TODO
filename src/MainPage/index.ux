@@ -1,0 +1,850 @@
+<import name="main-page-item" src="../MainPage/main-page-item.ux"></import>
+
+<template>
+  <!-- 主页和统计页面堆叠 -->
+  <stack>
+    <!-- 统计页面 -->
+    <!-- inAnim: stack里层的动画 -->
+    <div class='analyze-page {{inAnim}}'>
+      <!-- header部分的文字及图片 -->
+      <div class='header'>
+        <text class='title'>Statistics</text>
+        <div class="home">
+          <text class="home-text">home</text>
+          <image class="home-img" src="../assets/images/home-gray.png"></image>
+        </div>
+      </div>       
+      <stack>
+        <!-- 将两个统计图放在swiper中 -->
+        <swiper class="swiper" indicator="true" loop="false">
+          <div class='canvas-container'>
+            <!-- 活动计数 -->
+            <text class='canvas-text'>Event Count:</text>
+            <!-- 使用canvas绘制条形统计图 -->
+            <canvas id='bar-canvas'></canvas>
+          </div>
+          <div class='canvas-container'> 
+            <!-- ddl占比 -->
+            <text class='canvas-text'>DDL Percent:</text>
+            <!-- 使用canvas绘制扇形统计图 -->
+            <canvas id='time-canvas'></canvas>
+          </div>
+        </swiper>        
+      </stack>
+      <stack>
+        <!-- 主表：绘制扇形统计图 -->
+        <div class="main-chart">
+          <text class='canvas-text'>TODO Percent:</text>
+          <canvas id='main-canvas'></canvas>
+          <div class="total_tip_color">
+            <div class="tip_color" for="{{event_num_list}}">
+              <!-- 图例 -->
+              <div class="color_indication" style="background-color:#{{['40d69c','50b8ff','ff8c46'][$idx]}}"></div>
+              <text class="des-text" style="font-size:26px;">{{['todo','doing','done'][$idx]}}\n{{$item | cal}}%</text>
+            </div>
+          </div>
+        </div>
+      </stack>
+    </div>
+    <!-- 主页 -->
+    <!-- 当is_home为真时显示，避免在统计界面干扰主页 -->
+    <div if="is_home" class="main-page {{outAnim}}">
+      <!-- header部分的文字及图片 -->
+      <div class='header'>
+        <!-- 根据index展示当前名称 -->
+        <text class='title'>{{mapping(activeIndex)}}</text>
+        <div class="stats">
+          <text class="stats-text">statistics</text>
+          <image class="stats-img" src="../assets/images/cal-gray.png"></image>
+        </div>
+      </div>
+      <!-- 以tab的形式呈现event，点击tab转换active，进而转换页面 -->
+      <tabs class="tabs" onchange="tabActivate" index="{{activeIndex}}">
+        <!-- 每个bar对应的文字和图片 -->
+        <tab-bar class="tab-bar">
+          <div class="tab-manage">
+            <!-- 根据index决定展示logo -->
+            <image class="tab-image"  src={{show_todo_img(activeIndex)}}></image>
+            <text class="tab-text">TODO</text>
+          </div>
+          <div class="tab-manage">
+            <image class="tab-image" src={{show_doing_img(activeIndex)}}></image>
+            <text class="tab-text">DOING</text>
+          </div>
+          <div class="tab-manage">
+            <image class="tab-image" src={{show_done_img(activeIndex)}}></image>
+            <text class="tab-text">DONE</text>
+          </div>
+        </tab-bar>
+        <!-- tab的具体内容 -->
+        <tab-content class="tab-content">
+          <div class="item-container">
+            <list class='todo-list'>
+              <block for='{{toDoList}}'>
+                <list-item type="item">
+                  <!-- 引用自定义的组件 -->
+                  <main-page-item item='{{$item}}' idx='{{$idx}}' type='0'></main-page-item>
+                </list-item>
+              </block>
+            </list>
+          </div>
+          <div class="item-container">
+            <list class='doing-list'>
+              <block for='{{doingList}}'>
+                <list-item type="item">
+                  <main-page-item item='{{$item}}' idx='{{$idx}}' type='1'></main-page-item>
+                </list-item>
+              </block>
+            </list>
+          </div>
+          <div class="item-container">
+            <list class='done-list'>
+              <block for='{{doneList}}'>
+                <list-item type="item">
+                  <main-page-item item='{{$item}}' idx='{{$idx}}' type='2'></main-page-item>
+                </list-item>
+              </block>
+            </list>
+          </div>
+        </tab-content>
+      </tabs>
+      <!-- 添加事件按钮 -->
+      <input class='btn' type="button" value='+' 
+      onclick="openInput('', 'ok', 'No ddl', '', '', '', '', '')"></input>
+    </div>
+    <!-- 跳转按钮，切换主页和统计页面 -->
+    <div class="jumping" onclick='aboveClick'></div>
+  </stack>
+</template>
+
+<script>
+// 数据存储
+import storage from '@system.storage'
+// 页面跳转路由
+import router from '@system.router'
+// 震动
+import vibrator from '@system.vibrator'
+// 提醒
+import prompt from '@system.prompt'
+
+export default {
+  private: {
+    // 外层动画
+    outAnim: '',
+    // 里层动画
+    inAnim: '',
+    // active的bar，默认为DOING
+    activeIndex: 1,
+    // 是否为主页，默认为true
+    is_home: true,
+    // 当前bar名称
+    state: '',
+    // 存储event数量的list
+    event_num_list: [],
+    // event中的location
+    location: '',
+    // 是否为重要事件，默认为false
+    is_important: false,
+    // 预设内容
+    toDoList: [
+      { name: 'Jogging', start: '2022-7-18 17:45', end: '2022-7-18 17:46',
+        location: 'playground in UESTC' },
+      { name: '学习Pytorch', start: '2022-8-6 18:1', end: '2022-8-19 13:1',
+        content: '掌握Pytorch框架下的神经网络相关知识', is_important: true },
+    ],
+    doingList: [
+      { name: 'Playing ヘブン', start: '2022-2-20 10:15', end: '2022-9-20 10:15'},
+      { name: '暑假', start: '2022-7-1 16:9', end: '2022-8-28 16:9', location: 'home',
+        content: '学习英语、C语言、数学分析', is_important: true },
+      { name: '强健身体', start: '2022-7-12 17:41', end: '2022-7-25 17:41',
+        location: 'gym'}
+    ],
+    doneList: [
+      { name: '买书', start: '2022-2-23 9:3', end: '2022-2-23 18:4' }
+    ]
+  },
+
+  onInit() {
+    // 清理内存
+    // storage.clear() 
+    // 设定标题
+    this.$page.setTitleBar({ text: 'TODO QUICKAPP' })
+    // 完成事件并存储
+    this.$on('doneItem', (evt) => {
+      if (evt.detail.type == 0) {
+        this.doneList.push(this.toDoList[evt.detail.idx])
+        this.toDoList.splice(evt.detail.idx, 1)
+      }
+      else {
+        this.doneList.push(this.doingList[evt.detail.idx])
+        this.doingList.splice(evt.detail.idx, 1)
+      }
+      this.saveLists()
+    })
+    // 删除事件并存储
+    this.$on('delItem', (evt) => {
+      this.doneList.splice(evt.detail.idx, 1)
+      this.saveLists()
+    })
+  },
+
+  // 每次显示统计页面时读取数据并绘制图表
+  onShow() {
+    let that = this
+    // 读取数据
+    this.loadLists(function (data) {
+      if (data != '') {
+        let list = JSON.parse(data)
+        that.toDoList = list.toDoList
+        that.doingList = list.doingList
+        that.doneList = list.doneList
+        let nowDate = new Date()
+        // 遍历toDoList，重新归类
+        that.toDoList.forEach(function (element, index) {
+          // 将所有界符均替换为','，便于操作
+          let arr_start = element.start.replace(/[:\-\\& ]/g, ',').split(',')
+          let startDate = new Date(arr_start[0], arr_start[1] - 1, arr_start[2], arr_start[3], arr_start[4], 0, 0)
+        
+          // 若startTime小于当前时间则为doingList
+          if (nowDate.getTime() > startDate.getTime() || element.is_no_ddl) {
+            that.doingList.push(that.toDoList[index])
+            that.toDoList.splice(index, 1)
+            // 提醒
+            prompt.showToast({message: `todo event '${element.name}' is starting`})
+            vibrator.vibrate({ mode: 'long' })
+          }    
+        })
+        // 保存list修改
+        that.saveLists()
+      }
+    })
+    // 绘制统计图
+    this.drawBarCanvas()
+    this.drawTimeCanvas()
+    this.drawMainCanvas()
+  },
+
+  // 切换tab
+  tabActivate(e) {
+    this.activeIndex = e.index
+  },
+
+  // 建立index到value的映射
+  mapping(activeIndex) {
+    if (activeIndex == 0) {
+      return 'TODO'
+    }
+    else if (activeIndex == 1) {
+      return 'DOING'
+    }
+    else if (activeIndex == 2) {
+      return 'DONE'
+    }
+  },
+
+  // 根据是否active切换icon
+  show_todo_img(activeIndex) {
+    if (activeIndex == 0) {
+      return '../assets/images/todo-blue.png'
+    }
+    else 
+      return '../assets/images/todo-gray.png'
+  },
+  show_doing_img(activeIndex) {
+    if (activeIndex == 1) {
+      return '../assets/images/doing-blue.png'
+    }
+    else 
+      return '../assets/images/doing-gray.png'
+  },
+  show_done_img(activeIndex) {
+    if (activeIndex == 2) {
+      return '../assets/images/done-blue.png'
+    }
+    else 
+      return '../assets/images/done-gray.png'
+  },
+
+  // 切换至新建页面
+  // 参数：name：标题，start：起始时间，end：结束时间，content：内容，location：地点，
+  // is_all_day：全天，is_important：重要事件，is_no_ddl：无结束时间
+  openInput(name, start, end, content, location, is_all_day, is_important, is_no_ddl) {
+    this.saveLists(function () {
+      router.push({
+        uri: '/Input',
+        params: {
+          pushName: name,
+          pushStart: start,
+          pushEnd: end,
+          pushContent: content,
+          pushLocation: location,
+          pushAllDay: is_all_day,
+          pushImportant: is_important,
+          pushNoDDL: is_no_ddl,
+          pushType: -1,
+          pushIdx: -1
+        }
+      })
+    })
+  },
+
+  // list备份，需传入callback回调
+  saveLists(voidCallback = function () { }) {
+    let that = this
+    let list = { toDoList: this.toDoList, doingList: this.doingList, doneList: this.doneList }
+    storage.set({
+      key: 'msg',
+      value: list,
+      success: voidCallback(),
+      fail: function (data, code) {
+        that.$app.$def.makeToast(`handling fail, code = ${code}`)
+      }
+    })
+  },
+  // list读取，需传入callback回调
+  loadLists(dataCallback = function () { }) {
+    let that = this
+    storage.get({
+      key: 'msg',
+      success: function (data) {
+        dataCallback(data)
+      },
+      fail: function (data, code) {
+        that.$app.$def.makeToast(`handling fail, code = ${code}`)
+      }
+    })
+  },
+
+  // 绘制条形统计图
+  drawBarCanvas() {
+    // 各事件数量
+    var todo_num = this.toDoList.length
+    var doing_num = this.doingList.length
+    var done_num = this.doneList.length
+
+    // 各重要事件数量
+    var todo_im = 0
+    var done_im = 0
+    var doing_im = 0
+
+    this.toDoList.forEach(function (value) {
+      if (value.is_important == true)
+        todo_im++
+    })
+    this.doingList.forEach(function (value) {
+      if (value.is_important == true)
+        doing_im++
+    })
+    this.doneList.forEach(function (value) {
+      if (value.is_important == true)
+        done_im++
+    })
+
+    // 事件总数
+    var sum = todo_num + doing_num + done_num
+
+    // 占比
+    let todo = todo_num / sum * 250
+    let doing = doing_num / sum * 250
+    let done = done_num / sum * 250
+
+    let todo_i = todo * todo_im / todo_num
+    let doing_i = doing * doing_im / doing_num
+    let done_i = done * done_im / done_num
+
+    // canvas绘制
+    const canvas = this.$element('bar-canvas')
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(20, 0, 710, 350)
+    ctx.beginPath();
+    var height1 = [todo, doing, done]
+    var height2 = [todo_i, doing_i, done_i]
+    for(let i = 0; i < 3; i++) {
+      ctx.fillStyle = this.compColors()[i]; 
+      // ctx.fillRect(x起始位置，y起始位置，条形宽，条形高)
+      ctx.fillRect(160 + i * 175, 300 - height1[i], 20, height1[i]);
+      ctx.fillStyle = '#ff6464'
+      ctx.fillRect(180 + i * 175, 300 - height2[i], 20, height2[i]);
+    }
+    ctx.stroke(); 
+
+    // 图例
+    ctx.beginPath()
+    ctx.arc(520, 15, 15, 0, 2*Math.PI, false)
+    ctx.closePath()
+    ctx.fill()
+    ctx.font = '26px'
+    ctx.fillStyle = 'gray'
+    ctx.fillText('important', 553, 23)
+
+    //绘制统计文字
+    ctx.fillText(`${todo_num}`, 162, 298 - todo)
+    ctx.fillText(`${doing_num}`, 337, 298 - doing)
+    ctx.fillText(`${done_num}`, 512, 298 - done)
+
+    ctx.fillText(`${todo_im}`, 182, 298 - todo_i)
+    ctx.fillText(`${doing_im}`, 357, 298 - doing_i)
+    ctx.fillText(`${done_im}`, 532, 298 - done_i)
+
+    ctx.fillText(`todo`, 151, 330)
+    ctx.fillText(`doing`, 321, 330)
+    ctx.fillText(`done`, 497, 330)
+  },
+
+  // 扇形统计图
+  drawTimeCanvas() {
+    // 判断任务区间
+    let overtime = 0, day = 0, week = 0, month = 0, more = 0
+    const nowDate = new Date()
+    const dayDate = new Date()
+    dayDate.setTime(dayDate.getTime() + 24 * 60 * 60 * 1000)
+    const weekDate = new Date()
+    weekDate.setTime(weekDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const monthDate = new Date()
+    monthDate.setTime(monthDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    this.toDoList.forEach(function (value) {
+      // no ddl归为far away
+      if (value.is_no_ddl) { more += 1 }
+      else {
+        // 将所有界符均替换为','，便于操作
+        let arr = value.end.replace(/[:\-\\& ]/g, ',').split(',')
+        let endDate = new Date(arr[0], arr[1] - 1, arr[2], arr[3], arr[4], 0, 0)
+        // 不在一个月内
+        if (endDate.getTime() > monthDate.getTime()) more += 1
+        // 在一个月内
+        else if (endDate.getTime() > weekDate.getTime()) month += 1
+        // 在一周内
+        else if (endDate.getTime() > dayDate.getTime()) week += 1
+        // 在一天内
+        else if (endDate.getTime() > nowDate.getTime()) day += 1
+        // 超时
+        else overtime += 1
+      }
+    })
+    this.doingList.forEach(function (value) {
+      // no ddl归为far away
+      if (value.is_no_ddl) { more += 1 }
+      else {
+        // 将所有界符均替换为','，便于操作
+        let arr = value.end.replace(/[:\-\\& ]/g, ',').split(',')
+        let endDate = new Date(arr[0], arr[1] - 1, arr[2], arr[3], arr[4], 0, 0)
+        // 不在一个月内
+        if (endDate.getTime() > monthDate.getTime()) more += 1
+        // 在一个月内
+        else if (endDate.getTime() > weekDate.getTime()) month += 1
+        // 在一周内
+        else if (endDate.getTime() > dayDate.getTime()) week += 1
+        // 在一天内
+        else if (endDate.getTime() > nowDate.getTime()) day += 1
+        // 超时
+        else overtime += 1
+      }
+    })
+    // 总数
+    let total = overtime + day + week + month + more
+    // 各自的百分比
+    let percentList = [overtime / total, day / total, week / total, month / total, more / total]
+    // 计算弧度的百分比
+    let circleList = [0, ...percentList]
+    for (let i = 0; i < 5; i++) circleList[i + 1] += circleList[i]
+    // canvas绘制
+    const canvas = this.$element('time-canvas')
+    const ctx = canvas.getContext('2d')
+    const color = ['#778899', '#c71585', '#ffa07a', '#0d33ff', '#A2EBD7']
+    for (let i = 0; i < percentList.length; i++) {
+      percentList[i] = (percentList[i] * 100).toFixed(0)
+      if (percentList[i].length == 1) percentList[i] = '  ' + percentList[i] //错个位使数据整齐
+    }
+    // 调整对齐
+    let textList = [`overtime:     ${percentList[0]}%`, 
+                    `in a day:      ${percentList[1]}%`, 
+                    `in a week:    ${percentList[2]}%`, 
+                    `in a month:  ${percentList[3]}%`, 
+                    `far away:      ${percentList[4]}%`]
+    ctx.clearRect(0, 0, 750, 350)
+    ctx.lineWidth = 20
+    ctx.font = '23px'
+    for (let i = 0; i < 5; i++) {
+      // 绘制圆弧
+      ctx.beginPath()
+      ctx.strokeStyle = color[i]
+      ctx.arc(200, 175, 120, Math.PI * 2 * circleList[i], Math.PI * 2 * circleList[i + 1])
+      ctx.stroke()
+      // 绘制图例圆点
+      ctx.beginPath()
+      ctx.fillStyle = color[i]
+      ctx.arc(430, 75 + 50 * i, 10, 0, 2 * Math.PI)
+      ctx.fill()
+      // 绘制图例数据
+      ctx.fillStyle = '#000000'
+      ctx.fillText(textList[i], 455, 75 + 50 * i + 6) 
+    }
+    // 绘制圆心总计数据
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 55px'
+    ctx.fillText(`${total}`, 200, 167)
+    ctx.font = '22px'
+    ctx.fillStyle = '#949494'
+    ctx.fillText('events not done', 200, 205)
+  },
+
+  // 绘制扇形统计图，主图
+  drawMainCanvas() {
+    // 获取个数
+    var todo_num = this.toDoList.length
+    var doing_num = this.doingList.length
+    var done_num = this.doneList.length
+    var list = [todo_num, doing_num, done_num]
+
+    // canvas绘制
+    const canvas = this.$element("main-canvas")
+    const ctx = canvas.getContext("2d")
+    ctx.clearRect(0, 0, 710, 650)
+    let centerY = 300
+    let centerX = 355
+    for (var j = 0; j < 3; j++) {
+      ctx.beginPath()
+      ctx.moveTo(centerX, centerY)
+      ctx.arc(centerX, centerY, 290 - j * 20, this.calculateRad(list)[j]['startAngle'], this.calculateRad(list)[j]['endAngle'], false)
+      ctx.closePath()
+      ctx.fillStyle = this.calculateRad(list)[j]['color']
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(centerX, centerY)
+      ctx.arc(centerX, centerY, 150, this.calculateRad(list)[j]['startAngle'], this.calculateRad(list)[j]['endAngle'], false)
+      ctx.closePath()
+      ctx.strokeStyle = 'white'
+      ctx.stroke()
+      ctx.fillStyle = 'white'
+      ctx.fill()
+    }
+    // 图例
+    ctx.fillStyle = 'black'
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 80px'
+    ctx.fillText(`${eval(list.join("+"))}`, centerX, centerY - 10) 
+    ctx.font = '32px'
+    ctx.fillStyle = '#949494'
+    ctx.fillText('events in all', centerX, centerY + 50)
+  },
+  // 颜色
+  compColors() {
+    var arr = [];
+    arr.push('#40d69c')
+    arr.push('#50b8ff')
+    arr.push('#ff8c46')
+    return arr
+  },
+  // 计算弧度
+  calculateRad(list) {
+    var arr = []
+    this.event_num_list = list
+    var sum = eval(list.join("+"))
+    const pi = Math.PI
+    var startAngle = 1.5 * pi
+    var endAngle = 1.5 * pi
+    var percentage = 0
+    var len = 3;
+    for (var i = 0; i < len; i++) {
+      percentage = ((list[i] * 100) / sum).toFixed(2)
+      if (i < len - 1) {
+        endAngle = startAngle + (percentage / 100 * 2 * pi)
+      } else {
+        endAngle = 3.5 * pi
+      }
+      var item = {
+        name: i,
+        value: i,
+        percentage: percentage.toString() + '%',
+        startAngle: startAngle,
+        endAngle: endAngle,
+        color: this.compColors()[i]
+      }
+      arr.push(item)
+      startAngle = endAngle
+    }
+    return arr
+  },
+  
+  // 计算百分比
+  cal(data) {
+    return (data / (this.event_num_list[0] + this.event_num_list[1] + this.event_num_list[2]) * 100).toFixed(1)
+  },
+
+  // 点击切换界面，同时触发动画
+  aboveClick() {
+    if (this.outAnim == '' || this.outAnim == 'aboveReverse') {
+      this.drawBarCanvas()
+      this.drawTimeCanvas()
+      this.drawMainCanvas()
+      this.outAnim = 'aboveForward'
+      this.inAnim = 'belowForward'
+    } 
+    else {
+      this.outAnim = 'aboveReverse'
+      this.inAnim = 'belowReverse'
+    }
+    this.sleep(20)
+    this.is_home = !this.is_home
+  },
+  sleep(delay) {
+    var start = (new Date()).getTime();
+    while ((new Date()).getTime() - start < delay) {
+      continue;
+    }
+  }
+}
+</script>
+
+<style lang="less">
+@import "../Common/css/font.css";
+
+.header {
+  height: 150px;
+  width: 750px;
+  background-color: rgb(239, 244, 255);
+  padding: 50px;
+  .title {
+    height: 50px;
+    width: 470px;
+    font-family: myfont, serif;
+    font-size: 50px;
+    font-weight: 300;
+    color: #000000;
+  }
+  .stats-text {
+    width: 130px;
+    height: 50px;
+    margin-right: 0px;
+    color: #949494;
+  }
+  .stats-img {
+    width: 40px;
+    height: 40px;
+  }
+  .home-text {
+    width: 90px;
+    height: 50px;
+    margin-left: 50px;
+    color: #949494;
+  }
+  .home-img {
+    width: 50px;
+    height: 50px;
+  }
+}
+.main-page {
+  background-color: rgb(239, 244, 255);
+  flex-direction: column;
+  .btn {
+    bottom: 150px;
+    left: 600px;
+    height: 100px;
+    width: 100px;
+    background-color: #0077ff;
+    position: fixed; 
+    border-radius: 100%;
+    font-size: 50px;
+    text-align: center;
+    color: #f0f8ff;
+  }
+  .tabs {
+    flex: 1;
+    margin-top: 20px;
+    margin-bottom: 100px;
+    .tab-content {
+      flex: 1;
+      margin-bottom: 100px;
+    }
+    .tab-manage {
+      flex-direction: column;
+      justify-content: center;
+      align-content: center;
+      align-items: center;
+    }
+    .tab-bar {
+      height: 100px;
+      bottom: 0px;
+      position: fixed;
+      margin-left: 0px;
+      margin-right: 0px;
+      background-color: #ffffff;    
+    }
+    .tab-text {
+      font-weight: lighter;
+      font-size: 20px;
+      color: #949494;
+    }
+    .tab-text:active {
+      color: #0077ff;
+      font-weight: lighter;
+    }
+    .tab-image {
+      height: 50px;
+      width: 50px;
+    }
+  }
+}
+.analyze-page {
+  background-color: rgb(239, 244, 255);
+  flex-direction: column;
+  .swiper {
+    height: 470px;
+    indicator-size: 15px;
+    indicator-selected-color: #5ee7ff;
+    indicator-color: #949494;
+    indicator-bottom: 30px;
+  }
+  .canvas-container {
+    background-color: #ffffff;
+    border-radius: 40px; 
+    border: 20px;
+    border-color: rgb(239, 244, 255);
+    flex-direction: column;
+    #bar-canvas {
+      height: 350px;
+      width: 710px;
+      margin-left: 20px;
+      margin-right: 20px;
+    }
+    #time-canvas {
+      height: 350px;
+      width: 710px;
+      margin-left: 20px;
+      margin-right: 20px;
+    }
+    .canvas-text {
+      height: 70px;
+      font-size: 30px;
+      margin-left: 40px;
+      padding-top: 30px;
+      font-family: myfont, serif;
+    }
+  }
+  .main-chart {
+    height: 815px;
+    width: 710px;
+    border-radius: 40px;
+    margin-left: 20px;
+    margin-right: 20px;
+    margin-bottom: 20px;
+    background-color: #ffffff;
+    flex-direction: column;
+    #main-canvas {
+      height: 650px;
+      width: 710px;
+    }
+    .canvas-text {
+      height: 50px;
+      font-size: 30px;
+      margin-left: 20px;
+      margin-top: 10px;
+      margin-bottom: 20px;
+      font-family: myfont, serif;
+    }
+    .total_tip_color {
+      align-items: center;
+      margin-left: 50px;
+    }
+    .tip_color {
+      width: 236px;
+      align-items: center;
+      > text {
+        flex-direction: column;
+      }
+    }
+    .color_indication {
+      position: relative;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      margin: 0 20px;
+    }
+  }
+}
+
+.jumping {
+  width: 200px;
+  height: 50px;
+  margin-top:50px;
+  margin-left: 500px;
+  position: fixed;
+}
+
+/* 动画：旋转180 */
+.aboveForward {
+  animation-name: aboveForward;
+  animation-duration: 500ms;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease;
+  animation-iteration-count: 1;
+}
+
+@keyframes aboveForward {
+  from {
+    transform: rotateY(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+}
+
+.belowForward {
+  animation-name: belowForward;
+  animation-duration: 500ms;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease;
+  animation-iteration-count: 1;
+}
+
+@keyframes belowForward {
+  from {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(360deg);
+    opacity: 1;
+  }
+}
+
+.aboveReverse {
+  animation-name: aboveReverse;
+  animation-duration: 500ms;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease;
+  animation-iteration-count: 1;
+}
+
+@keyframes aboveReverse {
+  from {
+    transform: rotateY(180deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(360deg);
+    opacity: 1;
+  }
+}
+
+.belowReverse {
+  animation-name: belowReverse;
+  animation-duration: 500ms;
+  animation-fill-mode: forwards;
+  animation-timing-function: ease;
+  animation-iteration-count: 1;
+}
+
+@keyframes belowReverse {
+  from {
+    transform: rotateY(360deg);
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(540deg);
+    opacity: 0;
+  }
+}
+</style>

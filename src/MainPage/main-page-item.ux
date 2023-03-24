@@ -1,0 +1,207 @@
+<!-- 定义tab具体内容 -->
+<template>
+  <div class="item">
+    <list class='micro-list'>
+      <!-- 如果不是重要事件，则背景颜色为白 -->
+      <list-item if="{{!item.is_important}}" class="micro" type="item">
+        <div class="icon">
+          <!-- 根据是否为done选择check button -->
+          <div if='{{type != 2}}' class='check-btn' onclick="markDone(idx)"></div>
+          <div if="{{type == 2}}" class='cancle-btn' onclick="delItem(idx)"></div>
+        </div>
+        <!-- 事件的所有属性 -->
+        <div class="txt" onclick='openInput(item.name, item.start, item.end, type, idx, item.content, item.location, item.is_all_day, item.is_important, item.is_no_ddl)'>
+          <!-- 根据是否为done选择文本样式 -->
+          <text if="{{type != 2}}" class='text1'>{{item.name}}</text>
+          <text if="{{type == 2}}" class='text'>{{item.name}}</text>
+          <div class='time'>
+            <!-- 对时间填0 -->
+            <text class='text2'>begin: {{addZero(item.start)}}</text>
+            <text class='text2'>end: {{addZero(item.end)}}</text>
+          </div>
+        </div>
+      </list-item>
+      <!-- 如果是重要事件，则背景颜色为红 -->
+      <list-item if="{{item.is_important}}" class="micro-important" type="item">
+        <div class="icon">
+          <div if='{{type != 2}}' class='check-btn' onclick="markDone(idx)"></div>
+          <div if="{{type == 2}}" class='cancle-btn' onclick="delItem(idx)"></div>
+        </div>
+        <div class="txt" onclick='openInput(item.name, item.start, item.end, type, idx, item.content, item.location, item.is_all_day, item.is_important, item.is_no_ddl)'>
+          <text if="{{type != 2}}" class='text1'>{{item.name}}</text>
+          <text if="{{type == 2}}" class='text'>{{item.name}}</text>
+          <div class='time'>
+            <text class='text2'>begin: {{addZero(item.start)}}</text>
+            <text class='text2'>end: {{addZero(item.end)}}</text>
+          </div>
+        </div>
+      </list-item>
+    </list>
+  </div>
+</template>
+
+<script>
+import router from '@system.router'
+
+export default {
+  // type: todo == 0, doing == 1, done == 2
+  props: ['item', 'idx', 'type'],
+  
+  // 标记任务已完成
+  markDone(idx) {
+    this.$dispatch('doneItem', { idx: idx, type: this.type })
+  },
+
+  // 删除任务
+  delItem(idx) {
+    this.$dispatch('delItem', { idx: idx })
+  },
+
+  // 编辑任务
+  openInput(name, 
+            start, 
+            end, 
+            type, 
+            idx, 
+            content, 
+            location, 
+            is_all_day, 
+            is_important,
+            is_no_ddl) {
+    router.push({
+      uri: '/Input',
+      params: {
+        pushName: name,
+        pushStart: start,
+        pushEnd: end,
+        pushType: type,
+        pushIdx: idx,
+        pushContent: content,
+        pushLocation: location,
+        pushAllDay: is_all_day,
+        pushImportant: is_important,
+        pushNoDDL: is_no_ddl
+      }
+    })
+  },
+  // 对时间加0
+  addZero(time) {
+    if (time == 'No ddl')
+      return time
+    let time_list = time.split(':')
+    // 对只有1位的时间加0
+    return (time_list[0] + ":" + (time_list[1]<10?"0"+time_list[1]:time_list[1]))
+  },
+}
+</script>
+
+<style lang="less">
+@import "../Common/css/font.css";
+
+.item {
+  height: 120px;
+  margin-bottom: 20px;
+  .micro-list {
+    height: 120px;
+    .micro {
+      height: 120px;
+      width: 710px;
+      margin-left: 20px;
+      margin-right: 20px;
+      flex-grow: 0;
+      background-color: #ffffff;
+      border: 1px solid rgb(238, 240, 245);
+      border-radius: 40px;
+      .icon {
+        height: 100px;
+        width: 100px;
+        margin-left: 35px;
+      }
+      .txt {
+        flex-direction: column;
+        .text1 {
+          padding-top: 12px;
+          padding-left: 0px;
+          font-weight: bold;
+          font-size: 38px;
+          color: #000000;
+        }
+        .text {
+          padding-top: 12px;
+          padding-left: 0px;
+          font-weight: bold;
+          font-size: 38px;
+          color: #949494;
+        }
+        .time {
+          flex-direction: row;
+          margin-top: 10px;
+          padding-left: 0px;
+          .text2 {
+            width: 320px;
+            font-size: 23px;
+            margin-right: 0px;
+            font-family: myfont, serif;
+          }
+        }
+      }
+    }
+    .micro-important {
+      height: 120px;
+      width: 710px;
+      margin-left: 20px;
+      margin-right: 20px;
+      flex-grow: 0;
+      background-color: #fdebeb;
+      border: 1px solid rgb(238, 240, 245);
+      border-radius: 40px;
+      .icon {
+        height: 100px;
+        width: 100px;
+        margin-left: 35px;
+      }
+      .txt {
+        flex-direction: column;
+        .text1 {
+          padding-top: 12px;
+          padding-left: 0px;
+          font-weight: bold;
+          font-size: 38px;
+          color: #000000;
+        }
+        .text {
+          padding-top: 12px;
+          padding-left: 0px;
+          font-weight: bold;
+          font-size: 38px;
+          color: #949494;
+        }
+        .time {
+          flex-direction: row;
+          margin-top: 10px;
+          padding-left: 0px;
+          .text2 {
+            width: 320px;
+            font-size: 23px;
+            margin-right: 0px;
+            font-family: myfont, serif;
+          }
+        }
+      }
+    }
+  }
+}
+
+.check-btn {
+  width: 50px;
+  height: 50px;
+  margin-top: 35px;
+  background-image: url("../assets/images/tick.png");
+}
+.cancle-btn {
+  width: 50px;
+  height: 50px;
+  margin-top: 35px;
+  background-image: url("../assets/images/cross-gray.png");
+}
+</style>
